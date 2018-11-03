@@ -48,37 +48,41 @@ def getUSInfo():
 
 	for i in range(0,len(userStoriesJson)):
 		created = datetime.datetime.strptime(userStoriesJson[i]['created_date'], '%Y-%m-%dT%H:%M:%S.%fZ')-timedelta(hours=7)
-		userStories[i] = {'name' : userStoriesJson[i]['subject'],
+		usID = userStoriesJson[i]['id']
+		userStories[usID] = {'name' : userStoriesJson[i]['subject'],
 						  'created' : created,
 						  'closed' : userStoriesJson[i]['is_closed'],
-						  'id' : userStoriesJson[i]['id'],
 						  'points' : userStoriesJson[i]['total_points'],
+						  'ref' : userStoriesJson[i]['ref'],
+						  'tasks' : [],
 						  'modified' : datetime.datetime.strptime(userStoriesJson[i]['modified_date'], '%Y-%m-%dT%H:%M:%S.%fZ')-timedelta(hours=7)
 						}
 
 		# request to get US histroy. Is used to see when the userstory was moved into the Spring. 
-		res = requests.get(http +'history/userstory/'+str(userStories[i]['id']), headers = header)
-		userStories[i]['userStoryHistory'] = res.json()
+		res = requests.get(http +'history/userstory/'+str(usID), headers = header)
+		userStories[usID]['userStoryHistory'] = res.json()
 
-		US_H = userStories[i]['userStoryHistory']
+		US_H = userStories[usID]['userStoryHistory']
 
 		# find when US was moved into this sprint
 		for j in range(0,len(US_H)):
 			if 'milestone' in US_H[j]['diff']:
 				if (US_H[j]['diff']['milestone'][0] is None and US_H[j]['diff']['milestone'][1] == sprint['id']):
-					userStories[i]['inSprintDate'] = datetime.datetime.strptime(US_H[j]['created_at'], '%Y-%m-%dT%H:%M:%S.%fZ')
+					userStories[usID]['inSprintDate'] = datetime.datetime.strptime(US_H[j]['created_at'], '%Y-%m-%dT%H:%M:%S.%fZ')
 					break;
 
 		# print the collected information
-		print('\n\n       ', userStories[i]['name'])
-		print('           US is done: ', userStories[i]['closed'])
-		print('           Created: ', userStories[i]['created'].strftime(' %b %d %Y '))
-		print('           Points: ', userStories[i]['points'])
-		print('           Put in Sprint: ', userStories[i]['inSprintDate'].strftime(' %b %d %Y '))
-		if userStories[i]['inSprintDate'] > sprint['started']+ timedelta(days=1):
+		print('\n\n       ', userStories[usID]['name'])
+		print('           US is done: ', userStories[usID]['closed'])
+		print('           Created: ', userStories[usID]['created'].strftime(' %b %d %Y '))
+		print('           Points: ', userStories[usID]['points'])
+		print('           Put in Sprint: ', userStories[usID]['inSprintDate'].strftime(' %b %d %Y '))
+		if userStories[usID]['inSprintDate'] > sprint['started']+ timedelta(days=1):
 			print('           Put into Sprint after Sprint start ')
 
-
+	userStories['None'] = {'name' : 'None',
+							'tasks' : [],
+							'ref' : 'None'}
 
 # get project by slug
 res = requests.get(http +'projects/by_slug', headers = header, params = {'slug' : slug})
@@ -198,27 +202,39 @@ for i in range(0,len(tasksJson)):
 		finished_date =  None
 	else:
 		finished_date = datetime.datetime.strptime(tasksJson[i]['finished_date'], '%Y-%m-%dT%H:%M:%S.%fZ')-timedelta(hours=7)
-
-	tasks[i] = {'name' : tasksJson[i]['subject'],
+	taskID = tasksJson[i]['id']
+	tasks[taskID] = {'name' : tasksJson[i]['subject'],
 				'ref' : tasksJson[i]['ref'],
 				'created' : created,
 				'finished' : finished_date,
 				'is_closed' : tasksJson[i]['is_closed'],
-				'id' : tasksJson[i]['id'],
-				# 'usID' : tasksJson[i]['user_story_extra_info']['id'],
-				# 'usName' : tasksJson[i]['user_story_extra_info']['subject'],
 				'assignedTo' : tasksJson[i]['assigned_to']
 				}
+
+	# Check if task belogs to a User Story or is not assigned
+	if  tasksJson[i]['user_story_extra_info'] is not None:
+		tasks[taskID]['usID'] = tasksJson[i]['user_story_extra_info']['id'] 
+		tasks[taskID]['usName'] = tasksJson[i]['user_story_extra_info']['subject']
+		userStories[tasksJson[i]['user_story_extra_info']['id']]['tasks'].append(tasks[taskID])
+	else:
+		tasks[taskID]['usID'] = None
+		tasks[taskID]['usName'] = None
+		userStories['None']['tasks'].append(tasks[taskID])
+		
 	# add the tasks to the member that has the task assigned
 	if tasksJson[i]['assigned_to'] is None:
 		name = 'None'
 		members['None']['tasksNum'] = members['None']['tasksNum'] + 1
-		members['None']['tasks'].append(tasks[i])
+		members['None']['tasks'].append(taskID)
 	else:
 		name = members[tasksJson[i]['assigned_to']]['name']
 		members[tasksJson[i]['assigned_to']]['tasksNum'] = members[tasksJson[i]['assigned_to']]['tasksNum'] + 1
-		members[tasksJson[i]['assigned_to']]['tasks'].append(tasks[i])
-	# print(str(tasks[i]['ref']) + ' ' + tasks[i]['name'] + ' is assigned to: ', name)
+		members[tasksJson[i]['assigned_to']]['tasks'].append(taskID)
+
+print('################### US to Task ############################')
+for usID in userStories:
+	print("US: ", userStories[usID]['ref'], ' has ', len(userStories[usID]['tasks']), ' tasks.') 
+
 # going through the tasks history and plotting the information
 t = 0 # to give the y value in the plot
 events = {} # tasks can have a number of events
@@ -239,18 +255,21 @@ ax.plot((start, stop), (0, 0), 'k--', linewidth=1, alpha=.5, color = 'gray')
 
 # using dates on X-Axis
 ax.get_xaxis().set_major_formatter(mdates.DateFormatter('%m/%d'))
+print('################### MEMBERS ############################')
 
 # iterate through all members of the team (including None - unassigned)
 for key in members:
+	print('########################################################')
 	print('\n' + members[key]['name'] + ' has '+ str(members[key]['tasksNum']) + ' tasks.')
 	old_t = t
 
 	# iterate through all tasks assigned to this user (at the moment the program is called)
 	for i in range(0,len(members[key]['tasks'])):
-		task = members[key]['tasks'][i]
+		taskID =members[key]['tasks'][i]
+		task = tasks[taskID]
 
 		ax.plot((task['created'], stop), (t+1, t+1), 'k--', linewidth=0.5, alpha=.5)
-		res = requests.get(http +'history/task/' + str(task['id']), headers = header)
+		res = requests.get(http +'history/task/' + str(taskID), headers = header)
 		taskHistory = res.json()
 
 		task['history'] = taskHistory
@@ -279,18 +298,14 @@ for key in members:
 				# plotting
 				if len(eventsS) > 0 :
 					eS =  eventsS[len(eventsS)-1]['created']
-					# eS2 = eventsS[len(eventsS)-1]['created']
-
 					if eventsS[len(eventsS)-1]['status'] == 'In progress':
 						ax.plot((eS, eventS['created']), (t+1, t+1), 'k', color = 'red', linewidth=6, alpha=.5)
 						ax.plot((eS, eS), (t+1, t+1+0.1), 'k--', marker = '.', color = 'red', linewidth=1)
 						task['inProgressTime'] =  task['inProgressTime'] + eventS['created'] - eS
-				if len(eventsS) > 0 :
 					if eventsS[len(eventsS)-1]['status'] == 'Ready for test':
 						ax.plot((eS, eventS['created']), (t+1, t+1), 'k', color = 'orange', linewidth=3, alpha=.5)
 						ax.plot((eS, eS ), (t+1, t+1+0.2), 'k--', marker = '.', color = 'orange', linewidth=1)
 						task['inTestingTime'] = task['inTestingTime'] + eventS['created'] - eS
-				if len(eventsS) > 0 :
 					if eventsS[len(eventsS)-1]['status'] == 'Closed':
 						ax.plot((eS, eventS['created']), (t+1, t+1), 'k', color = 'green', linewidth=3, alpha=.5)
 						ax.plot((eS, eS), (t+1, t+1+0.3), 'k--', marker = '.', color = 'green', linewidth=1)
@@ -319,9 +334,9 @@ for key in members:
 				task['inProgressTime'] =  task['inProgressTime'] + stop - eventsS[length]['created']
 				ax.plot((eventsS[length]['created'], stop), (t+1, t+1), 'k', color = 'red', linewidth=6, alpha=.5)
 				ax.plot((eventsS[length]['created'], eventsS[length]['created']), (t+1, t+1+0.1), 'k--', marker = '.', color = 'red', linewidth=1)
-			ax.text(stop+timedelta(hours=12), t+0.6 , '#'+str(task['ref']), horizontalalignment='center', fontsize=10)
-			ax.text(stop+timedelta(hours=35), t+0.7 , '#'+str(round(task['inProgressTime'].seconds/60/60 + task['inProgressTime'].days*24)), horizontalalignment='center', fontsize=8, color = 'red')
-			ax.text(stop+timedelta(hours=55), t+0.7 , '#'+str(round(task['inTestingTime'].seconds/60/60+ task['inTestingTime'].days*24)), horizontalalignment='center', fontsize=8, color = 'orange')
+			ax.text(stop+timedelta(hours=25), t+0.75 , str(userStories[task['usID']]['ref']) + '#'+ str(task['ref']), horizontalalignment='center', fontsize=10)
+			ax.text(stop+timedelta(hours=60), t+0.8 , '#'+ str(round(task['inProgressTime'].seconds/60/60 + task['inProgressTime'].days*24)), horizontalalignment='center', fontsize=8, color = 'red')
+			ax.text(stop+timedelta(hours=80), t+0.8 , '#'+ str(round(task['inTestingTime'].seconds/60/60+ task['inTestingTime'].days*24)), horizontalalignment='center', fontsize=8, color = 'orange')
 
 		if len(eventsA) == 0:
 			ax.plot((task['created'], task['created']), (t+1, t+1-0.3), 'k--', marker = '.', color =  members[key]['color'], linewidth=1)
