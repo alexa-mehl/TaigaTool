@@ -82,7 +82,7 @@ def getUSInfo():
 
 	userStories['None'] = {'name' : 'None',
 							'tasks' : [],
-							'ref' : 'None'}
+							'ref' : 0}
 
 # get project by slug
 res = requests.get(http +'projects/by_slug', headers = header, params = {'slug' : slug})
@@ -217,8 +217,8 @@ for i in range(0,len(tasksJson)):
 		tasks[taskID]['usName'] = tasksJson[i]['user_story_extra_info']['subject']
 		userStories[tasksJson[i]['user_story_extra_info']['id']]['tasks'].append(tasks[taskID])
 	else:
-		tasks[taskID]['usID'] = None
-		tasks[taskID]['usName'] = None
+		tasks[taskID]['usID'] = 'None'
+		tasks[taskID]['usName'] = 'None'
 		userStories['None']['tasks'].append(tasks[taskID])
 		
 	# add the tasks to the member that has the task assigned
@@ -242,7 +242,7 @@ events = {} # tasks can have a number of events
 
 # go through history and start plotting. 
 start = sprint['started']
-stop = min([sprint['endDate'],datetime.datetime.now()]) + timedelta(days=1)
+stop = min([sprint['endDate'],datetime.datetime.now()])
 
 
 date_list = [start + datetime.timedelta(days=x) for x in range(0, (stop-start).days)]
@@ -292,23 +292,27 @@ for key in members:
 		 	# only status changes
 			if 'status' in diff.keys():
 				eventS['created'] = datetime.datetime.strptime(history['created_at'], '%Y-%m-%dT%H:%M:%S.%fZ')-timedelta(hours=7)
-				eventS['status'] = diff['status'][1]
+				eventS['status1'] = diff['status'][1]
+				eventS['status0'] = diff['status'][0]
 				print('     ', (eventS['created'].strftime(' %b %d %Y ')), ' ', diff['status'][1])
 
-				# plotting
+				# plotting the events
 				if len(eventsS) > 0 :
 					eS =  eventsS[len(eventsS)-1]['created']
-					if eventsS[len(eventsS)-1]['status'] == 'In progress':
-						ax.plot((eS, eventS['created']), (t+1, t+1), 'k', color = 'red', linewidth=6, alpha=.5)
-						ax.plot((eS, eS), (t+1, t+1+0.1), 'k--', marker = '.', color = 'red', linewidth=1)
-						task['inProgressTime'] =  task['inProgressTime'] + eventS['created'] - eS
-					if eventsS[len(eventsS)-1]['status'] == 'Ready for test':
-						ax.plot((eS, eventS['created']), (t+1, t+1), 'k', color = 'orange', linewidth=3, alpha=.5)
-						ax.plot((eS, eS ), (t+1, t+1+0.2), 'k--', marker = '.', color = 'orange', linewidth=1)
-						task['inTestingTime'] = task['inTestingTime'] + eventS['created'] - eS
-					if eventsS[len(eventsS)-1]['status'] == 'Closed':
-						ax.plot((eS, eventS['created']), (t+1, t+1), 'k', color = 'green', linewidth=3, alpha=.5)
-						ax.plot((eS, eS), (t+1, t+1+0.3), 'k--', marker = '.', color = 'green', linewidth=1)
+				else:
+					eS = task['created']
+
+				if eventS['status0'] == 'In progress':
+					ax.plot((eS, eventS['created']), (t+1, t+1), 'k', color = 'red', linewidth=6, alpha=.5)
+					ax.plot((eS, eS), (t+1, t+1+0.1), 'k--', marker = '.', color = 'red', linewidth=1)
+					task['inProgressTime'] =  task['inProgressTime'] + eventS['created'] - eS
+				if eventS['status0'] == 'Ready for test':
+					ax.plot((eS, eventS['created']), (t+1, t+1), 'k', color = 'orange', linewidth=3, alpha=.5)
+					ax.plot((eS, eS ), (t+1, t+1+0.2), 'k--', marker = '.', color = 'orange', linewidth=1)
+					task['inTestingTime'] = task['inTestingTime'] + eventS['created'] - eS
+				if eventS['status0'] == 'Closed':
+					ax.plot((eS, eventS['created']), (t+1, t+1), 'k', color = 'green', linewidth=3, alpha=.5)
+					ax.plot((eS, eS), (t+1, t+1+0.3), 'k--', marker = '.', color = 'green', linewidth=1)
 				eventsS.append(eventS)
 
 			# only assignment changes
@@ -323,20 +327,20 @@ for key in members:
 		length = len(eventsS) - 1 
 		if len(eventsS) > 0: 
 			length = len(eventsS) - 1
-			if eventsS[length]['status'] == 'Closed':
-				# ax.plot((eventsS[length]['created'], stop), (t+1, t+1), 'k', color = 'green', linewidth=3, alpha=.5)
+			if eventsS[length]['status1'] == 'Closed':
+				ax.plot((eventsS[length]['created'], stop), (t+1, t+1), 'k', color = 'green', linewidth=3, alpha=.5)
 				ax.plot((eventsS[length]['created'], eventsS[length]['created']), (t+1, t+1+0.3), 'k--', marker = '.', color = 'green', linewidth=1)
-			if eventsS[length]['status'] == 'Ready for test':
+			if eventsS[length]['status1'] == 'Ready for test':
 				task['inTestingTime'] = task['inTestingTime'] + stop - eventsS[length]['created']
 				ax.plot((eventsS[length]['created'], stop), (t+1, t+1), 'k', color = 'orange', linewidth=3, alpha=.5)
 				ax.plot((eventsS[length]['created'], eventsS[length]['created'] ), (t+1, t+1+0.2), 'k--', marker = '.', color = 'orange', linewidth=1)
-			if eventsS[length]['status'] == 'In progress':
+			if eventsS[length]['status1'] == 'In progress':
 				task['inProgressTime'] =  task['inProgressTime'] + stop - eventsS[length]['created']
 				ax.plot((eventsS[length]['created'], stop), (t+1, t+1), 'k', color = 'red', linewidth=6, alpha=.5)
 				ax.plot((eventsS[length]['created'], eventsS[length]['created']), (t+1, t+1+0.1), 'k--', marker = '.', color = 'red', linewidth=1)
-			ax.text(stop+timedelta(hours=25), t+0.75 , str(userStories[task['usID']]['ref']) + '#'+ str(task['ref']), horizontalalignment='center', fontsize=10)
-			ax.text(stop+timedelta(hours=60), t+0.8 , '#'+ str(round(task['inProgressTime'].seconds/60/60 + task['inProgressTime'].days*24)), horizontalalignment='center', fontsize=8, color = 'red')
-			ax.text(stop+timedelta(hours=80), t+0.8 , '#'+ str(round(task['inTestingTime'].seconds/60/60+ task['inTestingTime'].days*24)), horizontalalignment='center', fontsize=8, color = 'orange')
+			ax.text(stop+timedelta(hours=140), t+0.8 , '#'+ str(round(task['inProgressTime'].seconds/60/60 + task['inProgressTime'].days*24)), horizontalalignment='center', fontsize=8, color = 'red')
+			ax.text(stop+timedelta(hours=185), t+0.8 , '#'+ str(round(task['inTestingTime'].seconds/60/60+ task['inTestingTime'].days*24)), horizontalalignment='center', fontsize=8, color = 'orange')
+		ax.text(stop+timedelta(hours=70), t+0.75 , 'US#'+ str(userStories[task['usID']]['ref']) + ' #'+ str(task['ref']), horizontalalignment='center', fontsize=10)
 
 		if len(eventsA) == 0:
 			ax.plot((task['created'], task['created']), (t+1, t+1-0.3), 'k--', marker = '.', color =  members[key]['color'], linewidth=1)
@@ -348,10 +352,12 @@ for key in members:
 		t = t + 1
 
 	if(len(members[key]['tasks'])>0):
-		ax.plot((start, start), (t+0.3, old_t+0.7), 'k', color = members[key]['color'], linewidth=3, alpha=.5, label= members[key]['name'] )	
+		ax.plot((start, start), (t+0.3, old_t+0.7), 'k', color = members[key]['color'], linewidth=3, alpha=.5)	
+		ax.text(start- timedelta(days=5), old_t+0.7, members[key]['name'], horizontalalignment='center', fontsize=8, color = members[key]['color'])
 
-ax.plot(stop+timedelta(hours=80), t+10)
-ax.legend( loc = 'upper center')
+
+ax.plot(stop+timedelta(hours=200), t+2)
+ax.plot(start-timedelta(hours=200), t+2)
 
 plt.show()
 
